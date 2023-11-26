@@ -1,8 +1,6 @@
-/** @format */
-
 const express = require("express");
 const app = express();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 require("dotenv").config();
 const port = process.env.PORT || 5000;
@@ -29,6 +27,7 @@ async function run() {
     //*******ALL COLLECTIONS********/
     const classesCollection = client.db("tutorioDb").collection("classes");
     const cartCollection = client.db("tutorioDb").collection("carts");
+    const userCollection = client.db("tutorioDb").collection("users");
 
     //*****CLASSES API*****/
     // get data
@@ -51,13 +50,26 @@ async function run() {
       res.send(result);
     });
     // delete data
-    app.delete("/carts/:id", async (req, res) => {
-        const id = req.params.body;
-        const query= {_id: new ObjectId(id)}
-      const result = await cartCollection.deleteOne(query);
-      res.send(result);
-    });
+    app.delete('/carts/:id', async(req, res) =>{
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)}
+      const result = await cartCollection.deleteOne(query)
+      res.send(result)
+    })
 
+    //**********USERS RELATED API************/
+    // post data
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      // insert email if user does not exist
+      const query = {email:user.email}
+      const existingUser = await userCollection.findOne(query)
+      if(existingUser){
+        return res.send({message:'user already exists'})
+      }
+    const result = await userCollection.insertOne(user);
+    res.send(result);
+  });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
