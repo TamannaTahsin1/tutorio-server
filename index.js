@@ -28,11 +28,19 @@ async function run() {
     // await client.connect();
     //*******ALL COLLECTIONS********/
     const classesCollection = client.db("tutorioDb").collection("classes");
+    const cartCollection = client.db("tutorioDb").collection("carts");
 
     //*****CLASSES API*****/
     // get data
     app.get("/classes", async (req, res) => {
       const result = await classesCollection.find().toArray();
+      res.send(result);
+    });
+    //*****CART API*****/
+    // get data
+    app.post("/carts", async (req, res) => {
+        const cartItem = req.body;
+      const result = await cartCollection.insertOne(cartItem);
       res.send(result);
     });
 
