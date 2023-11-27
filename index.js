@@ -185,7 +185,10 @@ const verifyAdmin = async(req, res, next) =>{
     })
     // delete data
     app.delete('/teach/:id', async(req, res) =>{
-      const id = req.params.id
+      const id = req.params.id;
+      const query = {_id : new ObjectId(id)}
+      const result = await teachCollection.deleteOne(query);
+      res.send(result)
     })
 
     // Send a ping to confirm a successful connection
