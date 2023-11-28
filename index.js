@@ -33,6 +33,7 @@ async function run() {
     const cartCollection = client.db("tutorioDb").collection("carts");
     const userCollection = client.db("tutorioDb").collection("users");
     const teachCollection = client.db("tutorioDb").collection("teach");
+    const newClassesCollection = client.db("tutorioDb").collection("newClasses");
 
  
 // middlewares
@@ -62,12 +63,38 @@ const verifyAdmin = async(req, res, next) =>{
   }
   next();
 } 
+// verify teacher after verify token
+const verifyTeacher = async(req, res, next) =>{
+  const email = req.decoded.email;
+  const query = {email:email};
+  const user = await userCollection.findOne(query);
+  const isTeacher= user?.role  === 'teacher';
+  if(!isTeacher){
+    return res.status(403).send({message:'forbidden access'})
+  }
+  next();
+} 
     //*****CLASSES API*****/
     // get data
     app.get("/classes", async (req, res) => {
       const result = await classesCollection.find().toArray();
       res.send(result);
     });
+    //*****NEW CLASSES API*****/
+    //post data
+    app.post('/newClasses', async(req, res) =>{
+      const addNewClasses = req.body;
+      console.log(addNewClasses)
+      const result = await newClassesCollection.insertOne(addNewClasses);
+      res.send(result)
+    })
+    // delete data
+    app.delete('/classes/:id', verifyToken, verifyAdmin, async(req, res) =>{
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await classesCollection.deleteOne(query);
+      res.send(result)
+    })
     //*****CART API*****/
     // get data
     app.get("/carts", async (req, res) => {
@@ -122,7 +149,7 @@ const verifyAdmin = async(req, res, next) =>{
       }
     });
 
-    // patch data
+    // patch data for ADMIN
     app.patch("/users/admin/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
@@ -134,6 +161,33 @@ const verifyAdmin = async(req, res, next) =>{
       const result = await userCollection.updateOne(filter, updatedDoc);
       res.send(result);
     });
+    // patch data for TEACHER
+    app.patch("/users/teacher/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: "teacher",
+        },
+      };
+      const result = await userCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
+        // ~~~~~teacher related api~~~~~~
+    // get data
+    app.get("/users/teacher/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if(email !== req.decoded.email){
+        return res.status(403).send({message:'unauthorized access'})
+      }
+      const query = {email:email}
+      const user = await userCollection.findOne(query);
+      let teacher = false;
+      if(user){
+        teacher = user?.role === 'teacher'
+      }
+      res.send({teacher})
+    })
 
     // delete data
     app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
