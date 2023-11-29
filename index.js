@@ -6,12 +6,12 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const port = process.env.PORT || 5000;
 
 // middleware
 app.use(cors());
 app.use(express.json());
-
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.u5hejig.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -33,68 +33,79 @@ async function run() {
     const cartCollection = client.db("tutorioDb").collection("carts");
     const userCollection = client.db("tutorioDb").collection("users");
     const teachCollection = client.db("tutorioDb").collection("teach");
-    const newClassesCollection = client.db("tutorioDb").collection("newClasses");
+    const newClassesCollection = client
+      .db("tutorioDb")
+      .collection("newClasses");
+    const paymentCollection = client
+      .db("tutorioDb")
+      .collection("payments");
 
- 
-// middlewares
-const verifyToken = (req, res, next) =>{
-  console.log('inside verify token',req.headers.authorization)
-  if(!req.headers.authorization){
-    return res.status(401).send({message:'Forbidden Access'})
-  }
-  const token = req.headers.authorization.split(' ')[1];
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET,(err, decoded) =>{
-    if(err){
-      return res.status(401).send({message:'Forbidden Access'})
-    }
-    req.decoded = decoded;
-    
-    next()
-  })
-};
-// verify admin after verify token
-const verifyAdmin = async(req, res, next) =>{
-  const email = req.decoded.email;
-  const query = {email:email};
-  const user = await userCollection.findOne(query);
-  const isAdmin = user?.role  === 'admin';
-  if(!isAdmin){
-    return res.status(403).send({message:'forbidden access'})
-  }
-  next();
-} 
-// verify teacher after verify token
-const verifyTeacher = async(req, res, next) =>{
-  const email = req.decoded.email;
-  const query = {email:email};
-  const user = await userCollection.findOne(query);
-  const isTeacher= user?.role  === 'teacher';
-  if(!isTeacher){
-    return res.status(403).send({message:'forbidden access'})
-  }
-  next();
-} 
+    // middlewares
+    const verifyToken = (req, res, next) => {
+      // console.log("inside verify token", req.headers.authorization);
+      if (!req.headers.authorization) {
+        return res.status(401).send({ message: "Forbidden Access" });
+      }
+      const token = req.headers.authorization.split(" ")[1];
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: "Forbidden Access" });
+        }
+        req.decoded = decoded;
+
+        next();
+      });
+    };
+    // verify admin after verify token
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+    // verify teacher after verify token
+    const verifyTeacher = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isTeacher = user?.role === "teacher";
+      if (!isTeacher) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
     //*****CLASSES API*****/
     // get data
     app.get("/classes", async (req, res) => {
       const result = await classesCollection.find().toArray();
       res.send(result);
     });
-    //*****NEW CLASSES API*****/
-    //post data
-    app.post('/newClasses', async(req, res) =>{
-      const addNewClasses = req.body;
-      console.log(addNewClasses)
-      const result = await newClassesCollection.insertOne(addNewClasses);
-      res.send(result)
-    })
     // delete data
-    app.delete('/classes/:id', verifyToken, verifyAdmin, async(req, res) =>{
+    app.delete("/classes/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await classesCollection.deleteOne(query);
-      res.send(result)
-    })
+      res.send(result);
+    });
+    //*****NEW CLASSES API*****/
+    //post data
+    app.post("/newClasses", async (req, res) => {
+      const addNewClasses = req.body;
+      // console.log(addNewClasses);
+      const result = await newClassesCollection.insertOne(addNewClasses);
+      res.send(result);
+    });
+    // get data
+    app.get("/newClasses", async (req, res) => {
+      const cursor = newClassesCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
     //*****CART API*****/
     // get data
     app.get("/carts", async (req, res) => {
@@ -127,17 +138,17 @@ const verifyTeacher = async(req, res, next) =>{
     // get data
     app.get("/users/admin/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
-      if(email !== req.decoded.email){
-        return res.status(403).send({message:'unauthorized access'})
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "unauthorized access" });
       }
-      const query = {email:email}
+      const query = { email: email };
       const user = await userCollection.findOne(query);
       let admin = false;
-      if(user){
-        admin = user?.role === 'admin'
+      if (user) {
+        admin = user?.role === "admin";
       }
-      res.send({admin})
-    })
+      res.send({ admin });
+    });
     // post data
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -150,17 +161,22 @@ const verifyTeacher = async(req, res, next) =>{
     });
 
     // patch data for ADMIN
-    app.patch("/users/admin/:id", verifyToken, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updatedDoc = {
-        $set: {
-          role: "admin",
-        },
-      };
-      const result = await userCollection.updateOne(filter, updatedDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/users/admin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            role: "admin",
+          },
+        };
+        const result = await userCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+      }
+    );
     // patch data for TEACHER
     app.patch("/users/teacher/:id", async (req, res) => {
       const id = req.params.id;
@@ -173,21 +189,21 @@ const verifyTeacher = async(req, res, next) =>{
       const result = await userCollection.updateOne(filter, updatedDoc);
       res.send(result);
     });
-        // ~~~~~teacher related api~~~~~~
+    // ~~~~~teacher related api~~~~~~
     // get data
     app.get("/users/teacher/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
-      if(email !== req.decoded.email){
-        return res.status(403).send({message:'unauthorized access'})
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "unauthorized access" });
       }
-      const query = {email:email}
+      const query = { email: email };
       const user = await userCollection.findOne(query);
       let teacher = false;
-      if(user){
-        teacher = user?.role === 'teacher'
+      if (user) {
+        teacher = user?.role === "teacher";
       }
-      res.send({teacher})
-    })
+      res.send({ teacher });
+    });
 
     // delete data
     app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
@@ -206,43 +222,79 @@ const verifyTeacher = async(req, res, next) =>{
       });
       // res.send({ token });
       const result = await userCollection.insertOne(user);
-      res.send({result, token});
+      res.send({ result, token });
     });
 
     // *********TEACHER RELATED API***********
     // post data
-    app.post('/teach',async(req,res) =>{
+    app.post("/teach", async (req, res) => {
       const newTeacher = req.body;
-      console.log(newTeacher)
+      // console.log(newTeacher);
       const result = await teachCollection.insertOne(newTeacher);
-      res.send(result)
-    })
+      res.send(result);
+    });
     // get data
-    app.get('/teach', async(req, res) =>{
+    app.get("/teach", async (req, res) => {
       const cursor = teachCollection.find();
       const result = await cursor.toArray();
-      res.send(result)
-    })
+      res.send(result);
+    });
     // update data
-    app.patch('/teach/:id', async(req, res) =>{
+    app.patch("/teach/:id", async (req, res) => {
       const id = req.params.id;
-      const filter = {_id : new ObjectId(id)}
+      const filter = { _id: new ObjectId(id) };
       const updatePending = req.body;
-      console.log(updatePending);
+      // console.log(updatePending);
       const updateDoc = {
-        $set:{
-          status: updatePending.status
+        $set: {
+          status: updatePending.status,
         },
       };
       const result = await teachCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+    // delete data
+    app.delete("/teach/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await teachCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    // **********PAYMENT RELATED API**********
+    // payment intent
+    app.post("/create-payment-intent", async (req, res) => {
+      const {price} = req.body;
+      const amount = parseInt(price * 100);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+    });
+    // get data
+    app.get('/payments/:email', verifyToken, async(req, res) =>{
+      const query = {email: req.params.email}
+      if(req.params.email !== req.decoded.email){
+        return res.status(403).send({message:'forbidden access'})
+      }
+      const result = await paymentCollection.find(query).toArray()
       res.send(result)
     })
-    // delete data
-    app.delete('/teach/:id', async(req, res) =>{
-      const id = req.params.id;
-      const query = {_id : new ObjectId(id)}
-      const result = await teachCollection.deleteOne(query);
-      res.send(result)
+
+    // post data
+    app.post("/payments", async (req, res) => {
+      const payment = req.body;
+      const paymentResult = await paymentCollection.insertOne(payment)
+      const query = {_id: {
+        $in: payment.classIds.map(id => new ObjectId(id))
+      }}
+      const deleteResult = await cartCollection.deleteMany(query)
+      res.send({paymentResult, deleteResult})
     })
 
     // Send a ping to confirm a successful connection
