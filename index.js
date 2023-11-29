@@ -296,6 +296,22 @@ async function run() {
       const deleteResult = await cartCollection.deleteMany(query)
       res.send({paymentResult, deleteResult})
     })
+    //***********STATS RELATED API********** */
+    // get data
+    app.get('/admin-stats', verifyToken, verifyAdmin, async(req,res)=>{
+      const users = await userCollection.estimatedDocumentCount();
+      const totalCLasses = await classesCollection.estimatedDocumentCount();
+      const enrolled = await paymentCollection.estimatedDocumentCount();
+      // to get revenue
+      const payments = await paymentCollection.find().toArray();
+      const revenue = payments.reduce((total, payment) => total+payment.price,0)
+      res.send({
+        users,
+        totalCLasses,
+        enrolled,
+        revenue
+      })
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
