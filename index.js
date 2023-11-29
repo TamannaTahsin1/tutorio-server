@@ -6,7 +6,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -33,12 +33,14 @@ async function run() {
     const cartCollection = client.db("tutorioDb").collection("carts");
     const userCollection = client.db("tutorioDb").collection("users");
     const teachCollection = client.db("tutorioDb").collection("teach");
+    const assignmentCollection = client
+      .db("tutorioDb")
+      .collection("assignments");
+    const feedbackCollection = client.db("tutorioDb").collection("assignments");
     const newClassesCollection = client
       .db("tutorioDb")
       .collection("newClasses");
-    const paymentCollection = client
-      .db("tutorioDb")
-      .collection("payments");
+    const paymentCollection = client.db("tutorioDb").collection("payments");
 
     // middlewares
     const verifyToken = (req, res, next) => {
@@ -260,58 +262,81 @@ async function run() {
       const result = await teachCollection.deleteOne(query);
       res.send(result);
     });
-
+    // **********ASSIGNMENT RELATED API********
+    // post data
+    app.post("/assignment", async (req, res) => {
+      const newAssignment = req.body;
+      console.log(newAssignment);
+      const result = await assignmentCollection.insertOne(newAssignment);
+      res.send(result);
+    });
+    // get data
+    app.get("/assignment", async (req, res) => {
+      const cursor = assignmentCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
     // **********PAYMENT RELATED API**********
     // payment intent
     app.post("/create-payment-intent", async (req, res) => {
-      const {price} = req.body;
+      const { price } = req.body;
       const amount = parseInt(price * 100);
-
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
-        currency: 'usd',
-        payment_method_types: ['card']
+        currency: "usd",
+        payment_method_types: ["card"],
       });
       res.send({
-        clientSecret: paymentIntent.client_secret
-      })
+        clientSecret: paymentIntent.client_secret,
+      });
     });
     // get data
-    app.get('/payments/:email', verifyToken, async(req, res) =>{
-      const query = {email: req.params.email}
-      if(req.params.email !== req.decoded.email){
-        return res.status(403).send({message:'forbidden access'})
+    app.get("/payments/:email", verifyToken, async (req, res) => {
+      const query = { email: req.params.email };
+      if (req.params.email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
       }
-      const result = await paymentCollection.find(query).toArray()
-      res.send(result)
-    })
-
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    });
     // post data
     app.post("/payments", async (req, res) => {
       const payment = req.body;
-      const paymentResult = await paymentCollection.insertOne(payment)
-      const query = {_id: {
-        $in: payment.classIds.map(id => new ObjectId(id))
-      }}
-      const deleteResult = await cartCollection.deleteMany(query)
-      res.send({paymentResult, deleteResult})
-    })
+      const paymentResult = await paymentCollection.insertOne(payment);
+      const query = {
+        _id: {
+          $in: payment.classIds.map((id) => new ObjectId(id)),
+        },
+      };
+      const deleteResult = await cartCollection.deleteMany(query);
+      res.send({ paymentResult, deleteResult });
+    });
+
     //***********STATS RELATED API********** */
     // get data
-    app.get('/admin-stats', verifyToken, verifyAdmin, async(req,res)=>{
+    app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
       const users = await userCollection.estimatedDocumentCount();
       const totalCLasses = await classesCollection.estimatedDocumentCount();
       const enrolled = await paymentCollection.estimatedDocumentCount();
       // to get revenue
       const payments = await paymentCollection.find().toArray();
-      const revenue = payments.reduce((total, payment) => total+payment.price,0)
+      const revenue = payments.reduce(
+        (total, payment) => total + payment.price,
+        0
+      );
       res.send({
         users,
         totalCLasses,
         enrolled,
-        revenue
-      })
-    })
+        revenue,
+      });
+    });
+    // *********FEEDBACK API***********
+    // read data
+    app.get("/feedback", async (req, res) => {
+      const result = await feedbackCollection.find().toArray();
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
