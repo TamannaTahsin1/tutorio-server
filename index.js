@@ -36,7 +36,7 @@ async function run() {
     const assignmentCollection = client
       .db("tutorioDb")
       .collection("assignments");
-    const feedbackCollection = client.db("tutorioDb").collection("assignments");
+    const feedbackCollection = client.db("tutorioDb").collection("feedback");
     const newClassesCollection = client
       .db("tutorioDb")
       .collection("newClasses");
@@ -80,7 +80,7 @@ async function run() {
       }
       next();
     };
-    //*****CLASSES API*****/
+    //*****CLASSES API**************/
     // get data
     app.get("/classes", async (req, res) => {
       const result = await classesCollection.find().toArray();
